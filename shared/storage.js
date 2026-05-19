@@ -1,0 +1,123 @@
+// shared/storage.js — chrome.storage.local wrapper for Capsule persistence
+
+const STORAGE_KEY = 'kairo_capsules';
+const SETTINGS_KEY = 'kairo_settings';
+
+/**
+ * Save or upsert a capsule. Newest-first ordering.
+ * Atomic: read → modify → write in one async block.
+ * @param {Object} capsule
+ */
+export async function saveCapsule(capsule) {
+  try {
+    const existing = await getCapsules();
+    const idx = existing.findIndex(c => c.id === capsule.id);
+
+    if (idx > -1) {
+      existing[idx] = { ...existing[idx], ...capsule, updatedAt: Date.now() };
+    } else {
+      existing.unshift(capsule);
+    }
+
+    await chrome.storage.local.set({ [STORAGE_KEY]: existing });
+    return { success: true };
+  } catch (err) {
+    console.error('[Kairo] Storage write error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Retrieve all saved capsules.
+ * @returns {Promise<Object[]>}
+ */
+export async function getCapsules() {
+  try {
+    const res = await chrome.storage.local.get(STORAGE_KEY);
+    return res[STORAGE_KEY] || [];
+  } catch (err) {
+    console.error('[Kairo] Storage read error:', err);
+    return [];
+  }
+}
+
+/**
+ * Delete a capsule by its ID.
+ * @param {string} id
+ */
+export async function deleteCapsule(id) {
+  try {
+    const existing = await getCapsules();
+    const filtered = existing.filter(c => c.id !== id);
+    await chrome.storage.local.set({ [STORAGE_KEY]: filtered });
+    return { success: true };
+  } catch (err) {
+    console.error('[Kairo] Delete error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Partially update a capsule by its ID.
+ * @param {string} id
+ * @param {Object} updates - Fields to merge into the capsule
+ */
+export async function updateCapsule(id, updates) {
+  try {
+    const capsules = await getCapsules();
+    const capsule = capsules.find(c => c.id === id);
+    if (!capsule) {
+      return { success: false, error: 'Capsule not found' };
+    }
+    await saveCapsule({ ...capsule, ...updates, updatedAt: Date.now() });
+    return { success: true };
+  } catch (err) {
+    console.error('[Kairo] Update error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Get extension settings.
+ * @returns {Promise<Object>}
+ */
+export async function getSettings() {
+  try {
+    const res = await chrome.storage.sync.get(SETTINGS_KEY);
+    return res[SETTINGS_KEY] || {
+      autoEnrich: false,
+      showFloatingButton: true,
+      apiKey: '',
+    };
+  } catch (err) {
+    console.error('[Kairo] Settings read error:', err);
+    return { autoEnrich: false, showFloatingButton: true, apiKey: '' };
+  }
+}
+
+/**
+ * Save extension settings.
+ * @param {Object} settings
+ */
+export async function saveSettings(settings) {
+  try {
+    await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+    return { success: true };
+  } catch (err) {
+    console.error('[Kairo] Settings write error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Clear all capsule data. Danger zone.
+ */
+export async function clearAllCapsules() {
+  try {
+    await chrome.storage.local.remove(STORAGE_KEY);
+    return { success: true };
+  } catch (err) {
+    console.error('[Kairo] Clear error:', err);
+    return { success: false, error: err.message };
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "kairo-extension",
+  "version": "1.0.0",
+  "description": "Kairo — Capture AI chat context and reuse it anywhere",
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env BROWSER=chrome vite build --watch --mode development",
+    "dev:chrome": "cross-env BROWSER=chrome vite build --watch --mode development",
+    "dev:firefox": "cross-env BROWSER=firefox vite build --watch --mode development",
+    "build": "cross-env BROWSER=chrome vite build --mode production",
+    "build:chrome": "cross-env BROWSER=chrome vite build --mode production",
+    "build:firefox": "cross-env BROWSER=firefox vite build --mode production",
+    "dev:run-ff": "web-ext run --source-dir dist-firefox --target firefox-desktop"
+  },
+  "keywords": [
+    "browser-extension",
+    "ai",
+    "context",
+    "capsule",
+    "kairo"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "htm": "^3.1.1",
+    "preact": "^10.25.4",
+    "webextension-polyfill": "^0.12.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "vite": "^6.3.5",
+    "vite-plugin-web-extension": "^4.4.3"
+  }
+}

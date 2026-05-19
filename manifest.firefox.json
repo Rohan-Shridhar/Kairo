@@ -1,0 +1,11 @@
+{
+  "background": {
+    "scripts": ["background/service-worker.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "kairo@kairo.dev",
+      "strict_min_version": "109.0"
+    }
+  }
+}

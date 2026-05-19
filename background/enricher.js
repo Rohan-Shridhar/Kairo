@@ -1,0 +1,91 @@
+// background/enricher.js — Claude API enrichment for raw capsule data
+
+/**
+ * Enriches a capsule by sending its raw conversation to Claude API
+ * for structured extraction (title, summary, goals, constraints, stack, keyDecisions).
+ *
+ * @param {Object} capsule - The raw capsule to enrich
+ * @returns {Promise<Object>} The enriched capsule (or original on failure)
+ */
+export async function enrichCapsule(capsule) {
+  try {
+    const settings = await chrome.storage.sync.get('kairo_settings');
+    const apiKey = settings.kairo_settings?.apiKey;
+
+    if (!apiKey) {
+      console.warn('[Kairo Enricher] No API key configured — skipping enrichment');
+      return capsule;
+    }
+
+    const rawText = capsule.content.rawSnippet || 
+      capsule.content.rawTurns
+        ?.map(t => `[${t.role}]: ${t.text}`)
+        .join('\n\n')
+        .slice(-4000) || '';
+
+    if (!rawText.trim()) {
+      console.warn('[Kairo Enricher] No raw content to enrich');
+      return capsule;
+    }
+
+    const prompt = `
+You are a context extraction assistant for Kairo — a tool that saves AI chat context.
+Given this AI conversation, extract:
+- title: A short descriptive title (max 8 words)
+- summary: A 2-3 sentence summary of what the user is building or working on
+- goals: Array of specific goals the user mentioned
+- constraints: Array of any technical or business constraints mentioned
+- stack: Array of technologies, frameworks, or tools mentioned
+- keyDecisions: Array of any decisions or conclusions reached
+
+Respond ONLY with valid JSON matching this shape:
+{ "title": "", "summary": "", "goals": [], "constraints": [], "stack": [], "keyDecisions": [] }
+
+Conversation:
+${rawText}
+    `.trim();
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 800,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('[Kairo Enricher] API error:', response.status, response.statusText);
+      return capsule;
+    }
+
+    const data = await response.json();
+    const text = data.content?.[0]?.text || '{}';
+
+    const enriched = JSON.parse(text.replace(/```json|```/g, '').trim());
+
+    console.log('[Kairo Enricher] Successfully enriched capsule:', enriched.title);
+
+    return {
+      ...capsule,
+      title: enriched.title || capsule.title,
+      content: {
+        ...capsule.content,
+        summary: enriched.summary || capsule.content.summary,
+        goals: enriched.goals || capsule.content.goals,
+        constraints: enriched.constraints || capsule.content.constraints,
+        stack: enriched.stack || capsule.content.stack,
+        keyDecisions: enriched.keyDecisions || capsule.content.keyDecisions,
+      },
+      meta: { ...capsule.meta, enriched: true },
+    };
+  } catch (err) {
+    console.error('[Kairo Enricher] Enrichment failed:', err);
+    return capsule; // return unenriched on any failure
+  }
+}
