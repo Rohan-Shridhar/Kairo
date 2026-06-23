@@ -67,6 +67,7 @@ export function injectButton(onCapture) {
 
   // Capture Option
   const captureOpt = document.createElement('button');
+  captureOpt.id = 'kairo-capture-btn';
   captureOpt.textContent = 'Capture';
   styleMenuOption(captureOpt);
 
@@ -122,13 +123,17 @@ export function injectButton(onCapture) {
     }
   });
 
-  // Action: Capture
-  captureOpt.addEventListener('click', async () => {
+  // Shared capture routine — used by the menu AND the global trigger.
+  let capturing = false;
+  async function runCapture() {
+    if (capturing) return;
+    capturing = true;
     captureOpt.textContent = 'Capturing...';
     try {
       const success = await onCapture();
       if (success === false) {
         captureOpt.textContent = 'Capture';
+        capturing = false;
         return;
       }
       captureOpt.textContent = 'Saved';
@@ -139,8 +144,12 @@ export function injectButton(onCapture) {
     setTimeout(() => {
       captureOpt.textContent = 'Capture';
       menu.style.display = 'none';
+      capturing = false;
     }, 2000);
-  });
+  }
+
+  // Action: Capture
+  captureOpt.addEventListener('click', runCapture);
 
   // Action: Inject
   injectOpt.addEventListener('click', async () => {
@@ -203,6 +212,10 @@ export function injectButton(onCapture) {
 
   // Start tracking the chat input area
   trackInputArea();
+
+  // Expose the capture trigger for keyboard shortcut + context menu.
+  // The service worker invokes this inside the content script isolated world.
+  window.__kairoTriggerCapture = runCapture;
 }
 
 function styleMenuOption(opt) {
