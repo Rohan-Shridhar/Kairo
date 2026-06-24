@@ -242,8 +242,18 @@ function trackInputArea() {
     return null;
   };
 
+  let scheduled = false;
+  let lastKey = '';
+  let inputResizeObserver = null;
+
   const updatePosition = () => {
-    const input = findInput();
+    // Reuse the cached input while it is still attached; only re-run the
+    // selector sweep when it is missing or has been detached (e.g. SPA nav).
+    let input = currentTextarea;
+    if (!input || !document.contains(input)) {
+      input = findInput();
+    }
+
     if (input) {
       if (currentTextarea !== input) {
         currentTextarea = input;
@@ -270,9 +280,19 @@ function trackInputArea() {
             injectTextAndSend(text);
           }
         });
+
+        // Reposition when the input itself resizes (e.g. multi-line growth)
+        if (inputResizeObserver) inputResizeObserver.disconnect();
+        inputResizeObserver = new ResizeObserver(scheduleUpdate);
+        inputResizeObserver.observe(input);
       }
 
       const rect = input.getBoundingClientRect();
+
+      // Skip redundant style writes when the anchor has not moved.
+      const key = `${Math.round(rect.right)}:${Math.round(rect.bottom)}`;
+      if (key === lastKey && buttonWrapper.style.display === 'flex') return;
+      lastKey = key;
 
       // Position just to the right of the input, slightly above the bottom
       buttonWrapper.style.display = 'flex';
@@ -304,17 +324,37 @@ function trackInputArea() {
         buttonWrapper.style.top = `${rect.bottom - 40}px`;
       }
     } else {
-      // Fallback: bottom right
+      // Fallback: bottom right (write once until the state changes)
+      if (lastKey === 'fallback' && buttonWrapper.style.display === 'flex') return;
+      lastKey = 'fallback';
       buttonWrapper.style.display = 'flex';
       buttonWrapper.style.left = 'auto';
       buttonWrapper.style.right = '20px';
       buttonWrapper.style.top = 'auto';
       buttonWrapper.style.bottom = '80px';
     }
-    requestAnimationFrame(updatePosition);
   };
 
-  updatePosition();
+  // Coalesce every reposition trigger into a single animation frame.
+  function scheduleUpdate() {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
+      updatePosition();
+    });
+  }
+
+  // Reposition only in response to real layout changes, not on every frame.
+  window.addEventListener('scroll', scheduleUpdate, { passive: true, capture: true });
+  window.addEventListener('resize', scheduleUpdate, { passive: true });
+
+  // Catch the input being added, removed, or moved (incl. SPA navigation).
+  const domObserver = new MutationObserver(scheduleUpdate);
+  domObserver.observe(document.body, { childList: true, subtree: true });
+
+  // Initial placement.
+  scheduleUpdate();
 }
 
 function injectTextAndSend(text) {
